@@ -12,6 +12,10 @@ pandas = "^2.2.2"
 sqlalchemy = "^2.0.30"
 pyfs = {git = "https://github.com/NicholasSynovic/python-fs-utils"}
 progress = "^1.6"
+matplotlib = "^3.9.0"
+seaborn = "^0.13.2"
+click = "^8.1.7"
+humanize = "^4.9.0"
 
 
 [build-system]
