@@ -1,5 +1,6 @@
 from pathlib import Path
-from sqlite3 import Connection, Cursor
+from sqlite3 import Connection
+from string import Template
 from typing import Any, Iterable, List
 from urllib.parse import urlparse
 
@@ -8,8 +9,9 @@ import pandas
 import pandas as pd
 from humanize import intcomma
 from pandas import DataFrame, Series
+from progress.bar import Bar
 from progress.spinner import Spinner
-from pyfs import isFile, resolvePath
+from pyfs import isDirectory, isFile, resolvePath
 
 from src.stats import (
     OA_CITATION_COUNT,
@@ -364,6 +366,74 @@ def pm_IdentifyPapersPublishedInArXiv(pmDB: Connection) -> DataFrame:
     return pmDF[pmDF["url"].str.contains("10.48550/arxiv.")]
 
 
+def oapm_GetDOIsOfOAWorksThatCitePM(
+    oaDB: Connection,
+    pmCitationCounts: Series,
+    jsonOutputPath: Path,
+) -> dict[str, DataFrame]:
+    ptms: List[str] = ["ResNeXt", "Transformer-XL", "HRNet", "MAE"]
+    dfsDict: dict[str, DataFrame] = {}
+    dois: dict[str, List[str]] = {ptm: [] for ptm in ptms}
+
+    citeQueryTemplate: Template = Template(
+        template="SELECT work, reference FROM cites WHERE reference = '${oaID}'"
+    )
+    doiQueryTemplate: Template = Template(
+        template="SELECT oa_id, doi FROM works WHERE oa_id = '${oaID}'"
+    )
+
+    # Top 5 choosen because the 4th entry is a dataset and not a DNN
+    data: Series = pmCitationCounts[0:5]
+    data.drop(labels=data.index[3], inplace=True)
+    oaIDs: List[str] = data.index.to_list()
+
+    with Bar(
+        "Creating DataFrames of works that cite PeaTMOSS papers...", max=len(oaIDs)
+    ) as bar:
+        ptmIDX: int = 0
+        oaID: str
+        for oaID in oaIDs:
+            query: str = citeQueryTemplate.substitute(oaID=oaID)
+            dfsDict[ptms[ptmIDX]] = _createDFFromSQL(db=oaDB, query=query)
+            ptmIDX += 1
+            bar.next()
+
+    ptm: str
+    for ptm in ptms:
+        df: DataFrame = dfsDict[ptm]
+        workOAIDs: List[str] = df["work"].unique().tolist()
+
+        with Bar(
+            f"Identifying DOIs per work that cites {ptm}...", max=len(workOAIDs)
+        ) as bar:
+            oaID: str
+            for oaID in workOAIDs:
+                query: str = doiQueryTemplate.substitute(oaID=oaID)
+                dois[ptm].append(
+                    f"https://doi.org/{runOneValueSQLQuery(db=oaDB, query=query)[1]}"
+                )
+                bar.next()
+
+    for items in dois.items():
+        jsonFilePath: Path = Path(jsonOutputPath, f"{items[0]}.json")
+        foo: dict[str, List[str]] = {items[0]: items[1]}
+        df: DataFrame = DataFrame(data=foo)
+        df = df[~df[items[0]].str.contains(pat="!error")]
+        (
+            df.sample(
+                frac=1,
+                random_state=42,
+                ignore_index=True,
+            )
+            .iloc[0:10]
+            .T.to_json(
+                path_or_buf=jsonFilePath,
+                indent=4,
+            )
+        )
+        print(f"Saved file to: {jsonFilePath}")
+
+
 @click.command()
 @click.option(
     "-p",
@@ -381,12 +451,41 @@ def pm_IdentifyPapersPublishedInArXiv(pmDB: Connection) -> DataFrame:
     help="Path to OpenAlex database",
     required=True,
 )
-def main(pmPath: Path, oaPath: Path) -> None:
+@click.option(
+    "-a",
+    "--peatmoss-arxiv-citation-count",
+    "pmArxivCitationCount",
+    type=Path,
+    help="Path to pickled PeaTMOSS arXiv Citation Count",
+    required=False,
+    default=Path("../../data/pickle/pmArXivCitations.pickle"),
+    show_default=True,
+)
+@click.option(
+    "-j",
+    "--json-output",
+    "jsonOutput",
+    type=Path,
+    help="Path to JSON output",
+    required=False,
+    default=Path("../../data/json"),
+    show_default=True,
+)
+def main(
+    pmPath: Path,
+    oaPath: Path,
+    pmArxivCitationCount: Path,
+    jsonOutput: Path,
+) -> None:
     absPMPath: Path = resolvePath(path=pmPath)
     absOAPath: Path = resolvePath(path=oaPath)
+    absPMACCPath: Path = resolvePath(path=pmArxivCitationCount)
+    absJOPath: Path = resolvePath(path=jsonOutput)
 
     assert isFile(path=absPMPath)
     assert isFile(path=absOAPath)
+    assert isFile(path=absPMACCPath)
+    assert isDirectory(path=absJOPath)
 
     pmDB: Connection = connectToDB(dbPath=absPMPath)
     oaDB: Connection = connectToDB(dbPath=absOAPath)
@@ -439,13 +538,24 @@ def main(pmPath: Path, oaPath: Path) -> None:
         pmPapersPerJournal,
     )
 
-    oapm_arXivPMPapers: Series = oapm_CountCitationsOfArXivPMPapers(
-        pmDB=pmDB,
-        oaDB=oaDB,
-    )
+    oapm_arXivPMPapers: Series
+    try:
+        oapm_arXivPMPapers = pandas.read_pickle(filepath_or_buffer=absPMACCPath)
+    except FileExistsError:
+        oapm_arXivPMPapers = oapm_CountCitationsOfArXivPMPapers(
+            pmDB=pmDB,
+            oaDB=oaDB,
+        )
+        oapm_arXivPMPapers.to_pickle(path=absPMACCPath)
     print(
         "Number of citations per PeaTMOSS published in arXiv:\n",
         oapm_arXivPMPapers,
+    )
+
+    oapm_GetDOIsOfOAWorksThatCitePM(
+        oaDB=oaDB,
+        pmCitationCounts=oapm_arXivPMPapers,
+        jsonOutputPath=absJOPath,
     )
 
 

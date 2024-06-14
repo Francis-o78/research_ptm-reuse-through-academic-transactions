@@ -1,0 +1,62 @@
+{
+    "0":{
+        "Transformer-XL":"Engineering",
+        "HRNet":"Computer vision",
+        "MAE":"Computer science and engineering",
+        "ResNeXt":"Engineering"
+    },
+    "1":{
+        "Transformer-XL":"Biotechnology",
+        "HRNet":"Computer vision",
+        "MAE":"Computer science",
+        "ResNeXt":"Computer science and engineering"
+    },
+    "2":{
+        "Transformer-XL":"Engineering",
+        "HRNet":"Engineering",
+        "MAE":"Computer science and artificial intelligence",
+        "ResNeXt":"Engineering"
+    },
+    "3":{
+        "Transformer-XL":"Computer Science",
+        "HRNet":"Engineering",
+        "MAE":"Computer Science and Artificial Intelligence",
+        "ResNeXt":"Computer science and engineering"
+    },
+    "4":{
+        "Transformer-XL":"Computer science",
+        "HRNet":"Engineering",
+        "MAE":"Engineering",
+        "ResNeXt":"Computer science"
+    },
+    "5":{
+        "Transformer-XL":"Health sciences",
+        "HRNet":"Engineering",
+        "MAE":"Computer science",
+        "ResNeXt":"Computer science"
+    },
+    "6":{
+        "Transformer-XL":"Computer science",
+        "HRNet":"Computer vision",
+        "MAE":"Engineering",
+        "ResNeXt":"Engineering"
+    },
+    "7":{
+        "Transformer-XL":"Computer science and artificial intelligence",
+        "HRNet":"Computer science and engineering",
+        "MAE":"Engineering",
+        "ResNeXt":"Computer science"
+    },
+    "8":{
+        "Transformer-XL":"Computer science",
+        "HRNet":"Engineering",
+        "MAE":"Computer science and artificial intelligence",
+        "ResNeXt":"Engineering"
+    },
+    "9":{
+        "Transformer-XL":"Computer science and artificial intelligence",
+        "HRNet":"Computer vision",
+        "MAE":"Computer science and artificial intelligence",
+        "ResNeXt":"Engineering"
+    }
+}

@@ -131,7 +131,9 @@ def plot_PMPublicationVenuePaperCount(
 
 
 def plot_MostCitedArXivPMPapers(
-    oaDB: Connection, paperCitationCounts: Series, filepath: Path
+    oaDB: Connection,
+    paperCitationCounts: Series,
+    filepath: Path,
 ) -> None:
     """
     plot_MostCitedArXivPMPapers Plot the most cited PeaTMOSS models published to arXiv
@@ -180,6 +182,119 @@ def plot_MostCitedArXivPMPapers(
     plt.clf()
 
 
+def plot_AIClassificationOfPMModelUsage(
+    aiClasses: DataFrame,
+    filepath: Path,
+) -> None:
+    def _formatText(text: str) -> str:
+        firstClass: str = text.split(sep="and")[0].strip().title()
+
+        match firstClass:
+            case "Computer Science":
+                return firstClass.replace(" ", "\n")
+            case "Computer Vision":
+                return firstClass.replace(" ", "\n")
+            case "Health Sciences":
+                return firstClass.replace(" ", "\n")
+            case "Biotechnology":
+                return "Bio-\ntechnology"
+            case _:
+                return firstClass
+
+    xAxisFontSize: int = 7
+    ptmClasses: List[Series] = []
+    ptms: List[str] = aiClasses.columns.to_list()
+
+    ptm: str
+    for ptm in ptms:
+        data: Series = aiClasses[ptm]
+        data = data.apply(_formatText).value_counts(sort=True)
+        ptmClasses.append(data)
+
+    # Set up the matplotlib figure and axes
+    axes: List[Axes]
+    fig, axes = plt.subplots(2, 2)
+
+    # Flatten the axes array for easy iteration
+    axes = axes.flatten()
+
+    # Plot each series as a barplot on each subplot in order of popularity
+    seaborn.barplot(
+        x=ptmClasses[3].index,
+        y=ptmClasses[3].values,
+        ax=axes[0],
+    )
+    axes[0].set_title("ResNeXt")
+    axes[0].set_xlabel(xlabel="")
+    axes[0].set_xticklabels(
+        axes[0].get_xticklabels(),
+        fontsize=xAxisFontSize,
+    )
+    axes[0].bar_label(
+        container=axes[0].containers[0],
+        fmt=_humanizeInt,
+    )
+
+    seaborn.barplot(
+        x=ptmClasses[0].index,
+        y=ptmClasses[0].values,
+        ax=axes[1],
+    )
+    axes[1].set_title("Transformer-XL")
+    axes[1].set_xlabel(xlabel="")
+    axes[1].set_xticklabels(
+        axes[1].get_xticklabels(),
+        fontsize=xAxisFontSize,
+    )
+    axes[1].bar_label(
+        container=axes[1].containers[0],
+        fmt=_humanizeInt,
+    )
+
+    seaborn.barplot(
+        x=ptmClasses[1].index,
+        y=ptmClasses[1].values,
+        ax=axes[2],
+    )
+    axes[2].set_title("HRNet")
+    axes[2].set_xlabel(xlabel="")
+    axes[2].set_xticklabels(
+        axes[2].get_xticklabels(),
+        fontsize=xAxisFontSize,
+    )
+    axes[2].bar_label(
+        container=axes[2].containers[0],
+        fmt=_humanizeInt,
+    )
+
+    seaborn.barplot(
+        x=ptmClasses[2].index,
+        y=ptmClasses[2].values,
+        ax=axes[3],
+    )
+    axes[3].set_title("MAE")
+    axes[3].set_xlabel(xlabel="")
+    axes[3].set_xticklabels(
+        axes[3].get_xticklabels(),
+        fontsize=xAxisFontSize,
+    )
+    axes[3].bar_label(
+        container=axes[3].containers[0],
+        fmt=_humanizeInt,
+    )
+
+    fig.suptitle(t="Paper Classification Counts per PeaTMOSS Model")
+    fig.supxlabel(t="Paper Classification")
+    fig.supylabel(t="Number of Papers")
+
+    # Adjust layout for better spacing
+    plt.tight_layout()
+
+    # Show the plot
+    plt.savefig(filepath)
+    plt.clf()
+
+
 @click.command()
 @click.option(
     "-p",
@@ -200,21 +315,40 @@ def plot_MostCitedArXivPMPapers(
 @click.option(
     "-a",
     "--peatmoss-arxiv-citation-count",
-    "pmArxivCitationCount",
+    "pmArxivCitationCountPath",
     type=Path,
     help="Path to pickled PeaTMOSS arXiv Citation Count",
     required=False,
-    default=Path("pmArXivCitations.pickle"),
+    default=Path("../../data/pickle/pmArXivCitations.pickle"),
     show_default=True,
 )
-def main(pmPath: Path, oaPath: Path, pmArxivCitationCount: Path) -> None:
+@click.option(
+    "-i",
+    "--ai-classification",
+    "aiClassificationPath",
+    type=Path,
+    help="Path to JSON file of AI classes",
+    required=False,
+    default=Path("../../data/json/ai_nature_classes.json"),
+    show_default=True,
+)
+def main(
+    pmPath: Path,
+    oaPath: Path,
+    pmArxivCitationCountPath: Path,
+    aiClassificationPath: Path,
+) -> None:
     seaborn.set_style(style="darkgrid")
 
     absPMPath: Path = resolvePath(path=pmPath)
     absOAPath: Path = resolvePath(path=oaPath)
+    absPMACCP: Path = resolvePath(path=pmArxivCitationCountPath)
+    # Don't assert existence; may be created later (~ line 278)
+    absAIClassesPath = resolvePath(path=aiClassificationPath)
 
     assert isFile(path=absPMPath)
     assert isFile(path=absOAPath)
+    assert isFile(path=absAIClassesPath)
 
     pmDB: Connection = connectToDB(dbPath=absPMPath)
     oaDB: Connection = connectToDB(dbPath=absOAPath)
@@ -229,14 +363,14 @@ def main(pmPath: Path, oaPath: Path, pmArxivCitationCount: Path) -> None:
     pmPaperCitationCounts: Series
     try:
         pmPaperCitationCounts = pandas.read_pickle(
-            filepath_or_buffer=pmArxivCitationCount,
+            filepath_or_buffer=absPMACCP,
         )
     except FileNotFoundError:
         pmPaperCitationCounts = oapm_CountCitationsOfArXivPMPapers(
             pmDB=pmDB,
             oaDB=oaDB,
         )
-        pmPaperCitationCounts.to_pickle(path=pmArxivCitationCount)
+        pmPaperCitationCounts.to_pickle(path=absPMACCP)
 
     plot_PMPublicationVenuePaperCount(
         venuePaperCounts=pmVenueCounts,
@@ -253,6 +387,11 @@ def main(pmPath: Path, oaPath: Path, pmArxivCitationCount: Path) -> None:
         oaDB=oaDB,
         paperCitationCounts=pmPaperCitationCounts,
         filepath="numberOfCitationsPerPMModel.png",
+    )
+
+    aiClassesDF: DataFrame = pandas.read_json(path_or_buf=absAIClassesPath).T
+    plot_AIClassificationOfPMModelUsage(
+        aiClasses=aiClassesDF, filepath="numberOfPaperClassificationsPerPMModel.png"
     )
 
 
